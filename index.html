@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>Запись в барбершоп</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <header class="top">
+      <button type="button" class="back-link" id="demoBack" hidden aria-label="Назад">← Назад</button>
+      <div class="demo-badge" id="demoBadge" hidden>Демо-режим: открыто вне Telegram</div>
+      <ol class="steps" aria-label="Шаги записи">
+        <li data-step="1">Услуга</li>
+        <li data-step="2">День</li>
+        <li data-step="3">Время</li>
+        <li data-step="4">Готово</li>
+      </ol>
+    </header>
+
+    <main>
+      <section class="screen" data-screen="1">
+        <h1>Выберите услугу</h1>
+        <div class="list" id="services"></div>
+      </section>
+
+      <section class="screen" data-screen="2" hidden>
+        <h1>Выберите день</h1>
+        <p class="hint" id="serviceHint"></p>
+        <div class="grid days" id="days"></div>
+      </section>
+
+      <section class="screen" data-screen="3" hidden>
+        <h1>Выберите время</h1>
+        <p class="hint" id="dayHint"></p>
+        <div class="grid times" id="times"></div>
+        <p class="empty" id="timesEmpty" hidden>На этот день свободного времени нет. Вернитесь и выберите другой день.</p>
+      </section>
+
+      <section class="screen" data-screen="4" hidden>
+        <h1>Проверьте запись</h1>
+        <dl class="summary">
+          <div><dt>Услуга</dt><dd id="sumService"></dd></div>
+          <div><dt>Дата</dt><dd id="sumDate"></dd></div>
+          <div><dt>Время</dt><dd id="sumTime"></dd></div>
+          <div class="total"><dt>Стоимость</dt><dd id="sumPrice"></dd></div>
+        </dl>
+        <p class="note" id="inlineWarning" hidden>
+          Страница открыта через инлайн-кнопку, поэтому отправить выбор боту не получится.
+          Откройте её через кнопку под полем ввода сообщения.
+        </p>
+        <button type="button" class="primary" id="demoConfirm" hidden>Подтвердить запись</button>
+        <div class="result" id="result" hidden>
+          <p>Эти данные получил бы бот через <code>sendData</code>:</p>
+          <pre id="resultJson"></pre>
+          <button type="button" class="secondary" id="restart">Начать заново</button>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
