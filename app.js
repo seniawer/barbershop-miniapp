@@ -31,13 +31,15 @@
   const inTelegram = Boolean(tg && tg.platform && tg.platform !== 'unknown');
   // Через инлайн-кнопку приходит query_id, и sendData в этом случае не работает.
   const openedInline = Boolean(inTelegram && tg.initDataUnsafe && tg.initDataUnsafe.query_id);
-  const nativeBack = inTelegram && tg.isVersionAtLeast && tg.isVersionAtLeast('6.1');
+  const tgVersion = (v) => inTelegram && tg.isVersionAtLeast && tg.isVersionAtLeast(v);
+  const nativeBack = tgVersion('6.1');
 
   // date — номер дня от первого (0 — первый день из данных бота)
   const state = { step: 1, service: null, master: null, date: null, time: null, sent: false };
 
   const $ = (id) => document.getElementById(id);
   const priceFmt = (n) => n.toLocaleString('ru-RU') + ' ₽';
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
   // ---------- Данные от бота ----------
 
@@ -67,7 +69,7 @@
       && (x.minutes === null || (isInt(x.minutes) && x.minutes > 0)))) return null;
     if (!masters.every((x) => isStr(x.id) && isStr(x.name) && isStr(x.description)
       && Array.isArray(x.busy) && x.busy.length === n && x.busy.every(isInt))) return null;
-    const shop = Array.isArray(b) && b.length === 2 && b.every(isStr) ? { name: b[0], address: b[1] } : null;
+    const shop = Array.isArray(b) && b.length >= 2 && b.every(isStr) ? { name: b[0], address: b[1] } : null;
     return { firstDay: d, days: n, firstHour: h[0], lastHour: h[1], services, masters, shop };
   }
 
@@ -83,6 +85,28 @@
   }
 
   const data = loadData();
+
+  // ---------- Тема ----------
+
+  // Цвета у страницы свои (style.css). От Telegram берём только светлая тема или тёмная,
+  // а шапку, фон окна и MainButton перекрашиваем в наши цвета.
+  function applyTheme() {
+    if (!inTelegram) return; // в браузере тему выбирает prefers-color-scheme
+    document.documentElement.dataset.theme = tg.colorScheme === 'light' ? 'light' : 'dark';
+    const css = getComputedStyle(document.documentElement);
+    const bg = css.getPropertyValue('--bg').trim();
+    try {
+      if (tgVersion('6.9')) tg.setHeaderColor(bg);
+      if (tgVersion('6.1')) tg.setBackgroundColor(bg);
+      if (tgVersion('7.10')) tg.setBottomBarColor(bg);
+    } catch (err) {
+      // Старые клиенты могут не принять цвет — страница от этого не ломается
+    }
+    tg.MainButton.setParams({
+      color: css.getPropertyValue('--brass-fill').trim(),
+      text_color: css.getPropertyValue('--on-brass').trim(),
+    });
+  }
 
   // ---------- Даты и слоты ----------
 
@@ -180,33 +204,31 @@
     return [h ? h + ' ч' : '', m ? m + ' мин' : ''].filter(Boolean).join(' ');
   }
 
+  // «Открыто до 20:00» по часам работы (с первого часа записи до конца последнего)
+  function shopStatus() {
+    const open = data.firstHour;
+    const close = data.lastHour + 1;
+    const hour = new Date().getHours();
+    if (hour >= open && hour < close) return { open: true, text: 'Открыто до ' + pad(close) + ':00' };
+    const when = hour < open ? 'в ' : 'завтра в ';
+    return { open: false, text: 'Закрыто · откроется ' + when + pad(open) + ':00' };
+  }
+
   // ---------- Отрисовка ----------
 
   const SVG_NS = 'http://www.w3.org/2000/svg';
   const ICONS = {
-    clock: ['circle:12,12,9', 'M12 7v5l3 2'],
     chevron: ['M9 6l6 6-6 6'],
-    users: ['circle:9,8,3.5', 'M2.5 20a6.5 6.5 0 0 1 13 0', 'M16 4.5a3.5 3.5 0 0 1 0 7', 'M18 14a6 6 0 0 1 3.5 6'],
   };
 
-  // Иконки собираем из простых фигур: «circle:cx,cy,r» или путь SVG
   function icon(name, className) {
     const svg = document.createElementNS(SVG_NS, 'svg');
     svg.setAttribute('viewBox', '0 0 24 24');
     svg.setAttribute('aria-hidden', 'true');
     if (className) svg.setAttribute('class', className);
-    ICONS[name].forEach((shape) => {
-      let node;
-      if (shape.startsWith('circle:')) {
-        const [cx, cy, r] = shape.slice(7).split(',');
-        node = document.createElementNS(SVG_NS, 'circle');
-        node.setAttribute('cx', cx);
-        node.setAttribute('cy', cy);
-        node.setAttribute('r', r);
-      } else {
-        node = document.createElementNS(SVG_NS, 'path');
-        node.setAttribute('d', shape);
-      }
+    ICONS[name].forEach((d) => {
+      const node = document.createElementNS(SVG_NS, 'path');
+      node.setAttribute('d', d);
       svg.append(node);
     });
     return svg;
@@ -225,91 +247,90 @@
     return btn;
   }
 
-  // Цвета аватаров: насыщенные, с белыми буквами читаются и в светлой, и в тёмной теме
-  const AVATAR_COLORS = ['#b4543a', '#3a6db4', '#7b57b0', '#2e8b68', '#a87a2c', '#b03f6c', '#45808f'];
-
   function initials(name) {
     const parts = name.trim().split(/\s+/).filter(Boolean);
     const letters = parts.length > 1 ? parts[0][0] + parts[1][0] : (parts[0] || '?')[0];
     return letters.toUpperCase();
   }
 
-  function avatar(choice, small) {
-    const node = el('span', 'avatar' + (small ? ' small' : ''));
+  // Монограмма в тонком латунном кольце
+  function monogram(choice, small) {
+    const node = el('span', 'mono' + (small ? ' small' : ''));
+    node.setAttribute('aria-hidden', 'true');
     if (choice === ANY_MASTER) {
       node.classList.add('any');
-      node.append(icon('users'));
-      return node;
+      node.textContent = '∗';
+    } else {
+      node.textContent = initials(choice.name);
     }
-    let hash = 0;
-    for (const ch of choice.id) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
-    node.style.background = AVATAR_COLORS[hash % AVATAR_COLORS.length];
-    node.textContent = initials(choice.name);
     return node;
   }
 
   function renderShop() {
-    if (!data || !data.shop) return;
-    $('shopName').textContent = data.shop.name;
-    $('shopAddress').textContent = data.shop.address;
-    $('shopAddressRow').hidden = !data.shop.address;
-    document.title = 'Запись · ' + data.shop.name;
+    if (data.shop) {
+      $('shopName').textContent = data.shop.name;
+      $('shopAddress').textContent = data.shop.address;
+      $('shopAddress').hidden = !data.shop.address;
+      document.title = 'Запись · ' + data.shop.name;
+    }
+    const status = shopStatus();
+    $('shopStatus').textContent = status.text;
+    $('shopStatus').classList.toggle('open', status.open);
+    $('shopStatus').hidden = false;
   }
 
   function renderServices() {
     const box = $('services');
     box.replaceChildren();
     data.services.forEach((s) => {
-      const btn = button('card service');
+      const btn = button('price-row');
       btn.setAttribute('aria-pressed', String(state.service === s));
-      const body = el('span', 'body');
-      body.append(el('span', 'name', s.name));
-      if (s.minutes) {
-        const meta = el('span', 'meta');
-        meta.append(icon('clock'), document.createTextNode(durationFmt(s.minutes)));
-        body.append(meta);
-      }
-      btn.append(body, el('span', 'price', priceFmt(s.price)));
+      const line = el('span', 'price-line');
+      line.append(el('span', 'price-name', s.name), el('span', 'price-dots'), el('span', 'price-value', priceFmt(s.price)));
+      btn.append(line);
+      if (s.minutes) btn.append(el('span', 'price-meta', durationFmt(s.minutes)));
       btn.addEventListener('click', () => {
         state.service = s;
         select(btn);
-        go(2);
+        go(2, true);
       });
       box.append(btn);
     });
   }
 
+  function masterRow(choice) {
+    const free = weekFreeCount(choice);
+    const btn = button('master' + (choice === ANY_MASTER ? ' any' : ''));
+    btn.disabled = free === 0;
+    btn.setAttribute('aria-pressed', String(state.master === choice));
+    const body = el('span', 'master-body');
+    body.append(el('span', 'master-name', masterName(choice)));
+    const description = choice === ANY_MASTER ? 'Запишем к тому, кто свободен в это время' : choice.description;
+    if (description) body.append(el('span', 'master-desc', description));
+    body.append(el('span', 'master-free' + (free ? ' has' : ''), freeLabel(free)));
+    btn.append(monogram(choice), body, icon('chevron', 'chevron'));
+    btn.addEventListener('click', () => {
+      if (state.master !== choice) {
+        state.date = null;
+        state.time = null;
+      }
+      state.master = choice;
+      select(btn);
+      go(3, true);
+    });
+    return btn;
+  }
+
   function renderMasters() {
     $('masterHint').textContent = state.service.name + ' · ' + priceFmt(state.service.price);
-    const box = $('masters');
-    box.replaceChildren();
     const noneFree = weekFreeCount(ANY_MASTER) === 0;
     $('noSlots').hidden = !noneFree;
-    box.hidden = noneFree;
+    $('anyMaster').replaceChildren();
+    $('masters').replaceChildren();
+    $('masters').hidden = noneFree;
     if (noneFree) return;
-
-    [ANY_MASTER, ...data.masters].forEach((choice) => {
-      const free = weekFreeCount(choice);
-      const btn = button('card master');
-      btn.disabled = free === 0;
-      btn.setAttribute('aria-pressed', String(state.master === choice));
-      const body = el('span', 'body');
-      body.append(el('span', 'name', masterName(choice)));
-      const description = choice === ANY_MASTER ? 'Запишем к тому, кто свободен в это время' : choice.description;
-      if (description) body.append(el('span', 'meta', description));
-      body.append(el('span', 'free' + (free ? ' has' : ''), freeLabel(free)));
-      btn.append(avatar(choice), body, icon('chevron', 'chevron'));
-      btn.addEventListener('click', () => {
-        if (state.master !== choice) {
-          state.date = null;
-          state.time = null;
-        }
-        state.master = choice;
-        select(btn);
-        go(3);
-      });
-      box.append(btn);
-    });
+    $('anyMaster').append(masterRow(ANY_MASTER));
+    data.masters.forEach((m) => $('masters').append(masterRow(m)));
   }
 
   function firstFreeDay(from) {
@@ -346,7 +367,6 @@
         el('span', 'wd', d.toLocaleDateString('ru-RU', { weekday: 'short' })),
         el('span', 'num', String(d.getDate())),
         el('span', 'mon', d.toLocaleDateString('ru-RU', { month: 'short' }).replace('.', '')),
-        el('span', 'mark'),
       );
       btn.addEventListener('click', () => {
         if (state.date === i) return;
@@ -354,7 +374,7 @@
         state.time = null;
         haptic();
         box.querySelectorAll('.day').forEach((b) => b.setAttribute('aria-pressed', String(b === btn)));
-        btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+        btn.scrollIntoView({ behavior: reducedMotion.matches ? 'auto' : 'smooth', block: 'nearest', inline: 'center' });
         renderTimes();
       });
       box.append(btn);
@@ -401,7 +421,7 @@
       head.append(el('b', '', part.title), el('span', '', free ? 'свободно: ' + free : 'всё занято'));
       const grid = el('div', 'slots');
       partSlots.forEach((slot) => {
-        const btn = button('chip');
+        const btn = button('chip' + (slot.reason ? ' ' + slot.reason : ''));
         btn.textContent = slot.time;
         btn.disabled = !slot.available;
         if (slot.reason === 'busy') btn.setAttribute('aria-label', slot.time + ', занято');
@@ -413,30 +433,29 @@
           box.querySelectorAll('.chip').forEach((b) => b.setAttribute('aria-pressed', String(b === btn)));
           haptic();
           // Короткая пауза, чтобы было видно выбранное время
-          setTimeout(() => { if (state.step === 3 && state.time === slot.time) go(4); }, 180);
+          setTimeout(() => { if (state.step === 3 && state.time === slot.time) go(4, true); }, 180);
         });
         grid.append(btn);
       });
       group.append(head, grid);
       box.append(group);
     });
-    restartAnimation(box, 'fade');
   }
 
-  function renderSummary() {
-    $('sumService').textContent = state.service.name;
-    $('sumDuration').textContent = state.service.minutes ? 'Длительность: ' + durationFmt(state.service.minutes) : '';
-    $('sumDuration').hidden = !state.service.minutes;
-
-    const master = $('sumMaster');
-    master.replaceChildren(avatar(state.master, true),
-      document.createTextNode(state.master === ANY_MASTER ? 'Любой свободный' : state.master.name));
-
-    $('sumDate').textContent = longDate(state.date);
-    $('sumTime').textContent = state.time;
-    $('sumAddressRow').hidden = !(data.shop && data.shop.address);
-    if (data.shop) $('sumAddress').textContent = data.shop.address;
-    $('sumPrice').textContent = priceFmt(state.service.price);
+  function renderTicket() {
+    $('tShop').textContent = data.shop ? data.shop.name : 'Барбершоп';
+    $('tDate').textContent = longDate(state.date);
+    $('tTime').textContent = state.time;
+    $('tService').textContent = state.service.name;
+    $('tMaster').replaceChildren(
+      monogram(state.master, true),
+      document.createTextNode(state.master === ANY_MASTER ? 'Любой свободный' : state.master.name),
+    );
+    $('tDurationRow').hidden = !state.service.minutes;
+    $('tDuration').textContent = durationFmt(state.service.minutes);
+    $('tAddressRow').hidden = !(data.shop && data.shop.address);
+    if (data.shop) $('tAddress').textContent = data.shop.address;
+    $('tPrice').textContent = priceFmt(state.service.price);
 
     $('inlineWarning').hidden = !openedInline;
     $('result').hidden = true;
@@ -444,20 +463,20 @@
     state.sent = false;
   }
 
-  function renderSteps() {
-    document.querySelectorAll('.stepper li').forEach((li) => {
-      const n = Number(li.dataset.step);
-      li.classList.toggle('current', n === state.step);
-      li.classList.toggle('done', n < state.step);
-      if (n === state.step) li.setAttribute('aria-current', 'step');
-      else li.removeAttribute('aria-current');
-    });
+  const STEP_NAMES = ['Услуга', 'Мастер', 'Дата и время', 'Подтверждение'];
+
+  function renderProgress() {
+    $('progressText').textContent = 'Шаг ' + state.step + ' из 4 · ' + STEP_NAMES[state.step - 1];
+    $('progressFill').style.width = (state.step * 25) + '%';
   }
 
-  function restartAnimation(node, className) {
-    node.classList.remove('fwd', 'back', 'fade');
+  // Анимация — только в ответ на действие пользователя
+  function animate(node, className, extra) {
+    node.classList.remove('enter', 'back', 'print');
+    if (reducedMotion.matches) return;
     void node.offsetWidth; // перезапуск CSS-анимации
     node.classList.add(className);
+    if (extra) node.classList.add(extra);
   }
 
   function select(btn) {
@@ -465,20 +484,22 @@
     haptic();
   }
 
-  function go(step) {
-    const direction = step >= state.step ? 'fwd' : 'back';
+  // byUser — переход по нажатию: только тогда показываем анимацию
+  function go(step, byUser) {
+    const backwards = step < state.step;
     state.step = step;
     if (step === 1) renderServices();
     if (step === 2) renderMasters();
     if (step === 3) renderSlotsStep();
-    if (step === 4) renderSummary();
+    if (step === 4) renderTicket();
 
     document.querySelectorAll('.screen').forEach((s) => {
       const active = Number(s.dataset.screen) === step;
       s.hidden = !active;
-      if (active) restartAnimation(s, direction);
+      if (active && byUser) animate(s, 'enter', backwards ? 'back' : null);
     });
-    renderSteps();
+    if (step === 4 && byUser && !backwards) animate($('ticket'), 'print');
+    renderProgress();
     updateControls();
     window.scrollTo({ top: 0 });
   }
@@ -486,7 +507,7 @@
   function back() {
     if (state.step > 1) {
       haptic('light');
-      go(state.step - 1);
+      go(state.step - 1, true);
     }
   }
 
@@ -523,7 +544,6 @@
     $('resultJson').textContent = JSON.stringify(payload, null, 2);
     $('result').hidden = false;
     $('demoConfirm').hidden = true;
-    restartAnimation($('result'), 'fade');
   }
 
   function confirm() {
@@ -534,7 +554,7 @@
       haptic('error');
       notify('Это время уже недоступно. Выберите другое.');
       state.time = null;
-      go(3);
+      go(3, true);
       return;
     }
 
@@ -556,13 +576,13 @@
   }
 
   function notify(text) {
-    if (inTelegram && tg.showAlert && tg.isVersionAtLeast('6.2')) tg.showAlert(text);
+    if (tgVersion('6.2') && tg.showAlert) tg.showAlert(text);
     else window.alert(text);
   }
 
   // Без типа — выбор; 'light' — нажатие; 'success' / 'error' — итог действия
   function haptic(type) {
-    if (!inTelegram || !tg.HapticFeedback || !tg.isVersionAtLeast('6.1')) return;
+    if (!tgVersion('6.1') || !tg.HapticFeedback) return;
     if (type === 'success' || type === 'error') tg.HapticFeedback.notificationOccurred(type);
     else if (type) tg.HapticFeedback.impactOccurred(type);
     else tg.HapticFeedback.selectionChanged();
@@ -573,13 +593,15 @@
     state.master = null;
     state.date = null;
     state.time = null;
-    go(1);
+    go(1, true);
   }
 
   // ---------- Запуск ----------
 
   function init() {
     if (inTelegram) {
+      applyTheme();
+      tg.onEvent('themeChanged', applyTheme);
       tg.ready();
       tg.expand();
     } else {
@@ -589,7 +611,7 @@
     // Нет данных от бота или адрес испорчен — записаться отсюда не получится.
     if (!data) {
       $('loadError').hidden = false;
-      $('stepper').hidden = true;
+      $('progress').hidden = true;
       const action = $('errorAction');
       if (inTelegram) {
         action.addEventListener('click', () => tg.close());
@@ -611,7 +633,7 @@
     $('demoConfirm').addEventListener('click', confirm);
     $('restart').addEventListener('click', restart);
 
-    go(1);
+    go(1, false);
   }
 
   init();
