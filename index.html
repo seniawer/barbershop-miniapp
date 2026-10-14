@@ -6,29 +6,53 @@
   <meta name="color-scheme" content="light dark">
   <title>Запись в барбершоп</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <link rel="stylesheet" href="style.css?v=20261014-1">
+  <link rel="stylesheet" href="style.css?v=20261014-2">
 </head>
 <body>
   <div class="app">
-    <header class="top">
-      <button type="button" class="back-link" id="demoBack" hidden aria-label="Назад">← Назад</button>
-      <div class="demo-badge" id="demoBadge" hidden>Демо-режим: открыто вне Telegram</div>
-      <ol class="steps" aria-label="Шаги записи">
-        <li data-step="1">Услуга</li>
-        <li data-step="2">Мастер</li>
-        <li data-step="3">День</li>
-        <li data-step="4">Время</li>
-        <li data-step="5">Готово</li>
-      </ol>
+    <header class="hero">
+      <div class="pole" aria-hidden="true"></div>
+      <div class="hero-body">
+        <div class="logo" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.12 15.88M14.47 14.48 20 20M8.12 8.12 12 12"/></svg>
+        </div>
+        <div class="hero-text">
+          <p class="caption">Онлайн-запись</p>
+          <p class="shop-name" id="shopName">Барбершоп</p>
+          <p class="shop-address" id="shopAddressRow" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>
+            <span id="shopAddress"></span>
+          </p>
+        </div>
+      </div>
     </header>
 
-    <main>
-      <p class="empty" id="loadError" hidden>
-        Не удалось загрузить расписание. Закройте страницу и откройте её заново кнопкой
-        «📅 Открыть онлайн-запись» в чате с ботом.
-      </p>
+    <div class="demo-badge" id="demoBadge" hidden>Демо-режим: страница открыта вне Telegram</div>
 
-      <section class="screen" data-screen="1">
+    <nav class="stepper" id="stepper" aria-label="Шаги записи">
+      <ol>
+        <li data-step="1"><span class="dot">1</span><span class="label">Услуга</span></li>
+        <li data-step="2"><span class="dot">2</span><span class="label">Мастер</span></li>
+        <li data-step="3"><span class="dot">3</span><span class="label">Время</span></li>
+        <li data-step="4"><span class="dot">4</span><span class="label">Готово</span></li>
+      </ol>
+    </nav>
+
+    <button type="button" class="back-link" id="demoBack" hidden>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>Назад
+    </button>
+
+    <main>
+      <section class="state" id="loadError" hidden>
+        <div class="state-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17h.01"/></svg>
+        </div>
+        <h2>Не удалось загрузить расписание</h2>
+        <p>Закройте страницу и откройте её заново кнопкой «📅 Открыть онлайн-запись» в чате с ботом.</p>
+        <button type="button" class="secondary" id="errorAction">Закрыть</button>
+      </section>
+
+      <section class="screen" data-screen="1" hidden>
         <h1>Выберите услугу</h1>
         <div class="list" id="services"></div>
       </section>
@@ -37,30 +61,46 @@
         <h1>Выберите мастера</h1>
         <p class="hint" id="masterHint"></p>
         <div class="list" id="masters"></div>
+        <div class="state" id="noSlots" hidden>
+          <div class="state-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4M10 14l4 4M14 14l-4 4"/></svg>
+          </div>
+          <h2>Нет свободного времени</h2>
+          <p>Ближайшие дни расписаны полностью. Загляните позже — время может освободиться.</p>
+        </div>
       </section>
 
       <section class="screen" data-screen="3" hidden>
-        <h1>Выберите день</h1>
-        <p class="hint" id="serviceHint"></p>
-        <div class="grid days" id="days"></div>
+        <h1>Дата и время</h1>
+        <p class="hint" id="slotHint"></p>
+        <div class="days" id="days" aria-label="Дни"></div>
+        <p class="day-title" id="dayTitle"></p>
+        <div id="times"></div>
+        <div class="state" id="timesEmpty" hidden>
+          <div class="state-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+          </div>
+          <h2>Нет свободного времени</h2>
+          <p id="timesEmptyText">На этот день всё занято.</p>
+          <button type="button" class="secondary" id="nextFree" hidden>Ближайший свободный день</button>
+        </div>
       </section>
 
       <section class="screen" data-screen="4" hidden>
-        <h1>Выберите время</h1>
-        <p class="hint" id="dayHint"></p>
-        <div class="grid times" id="times"></div>
-        <p class="empty" id="timesEmpty" hidden>На этот день свободного времени нет. Вернитесь и выберите другой день.</p>
-      </section>
-
-      <section class="screen" data-screen="5" hidden>
         <h1>Проверьте запись</h1>
-        <dl class="summary">
-          <div><dt>Услуга</dt><dd id="sumService"></dd></div>
-          <div><dt>Мастер</dt><dd id="sumMaster"></dd></div>
-          <div><dt>Дата</dt><dd id="sumDate"></dd></div>
-          <div><dt>Время</dt><dd id="sumTime"></dd></div>
-          <div class="total"><dt>Стоимость</dt><dd id="sumPrice"></dd></div>
-        </dl>
+        <div class="ticket">
+          <div class="ticket-head">
+            <p class="ticket-service" id="sumService"></p>
+            <p class="ticket-duration" id="sumDuration"></p>
+          </div>
+          <dl class="ticket-rows">
+            <div><dt>Мастер</dt><dd id="sumMaster"></dd></div>
+            <div><dt>Дата</dt><dd id="sumDate"></dd></div>
+            <div><dt>Время</dt><dd id="sumTime"></dd></div>
+            <div id="sumAddressRow"><dt>Адрес</dt><dd id="sumAddress"></dd></div>
+          </dl>
+          <div class="ticket-total"><span>Стоимость</span><strong id="sumPrice"></strong></div>
+        </div>
         <p class="note" id="inlineWarning" hidden>
           Страница открыта через инлайн-кнопку, поэтому отправить выбор боту не получится.
           Откройте её через кнопку под полем ввода сообщения.
@@ -75,6 +115,6 @@
     </main>
   </div>
 
-  <script src="app.js?v=20261014-1"></script>
+  <script src="app.js?v=20261014-2"></script>
 </body>
 </html>

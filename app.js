@@ -146,33 +146,71 @@
     return slotsFor(choice, dayIndex).some((s) => s.time === time && s.available);
   }
 
-  function dayTitle(d, index) {
-    if (index === 0) return 'Сегодня';
-    if (index === 1) return 'Завтра';
-    return d.toLocaleDateString('ru-RU', { weekday: 'short' });
-  }
-
   function longDate(index) {
-    return upcomingDays()[index].toLocaleDateString('ru-RU', {
+    const text = upcomingDays()[index].toLocaleDateString('ru-RU', {
       weekday: 'long', day: 'numeric', month: 'long',
     });
+    if (index === 0) return 'сегодня, ' + text;
+    if (index === 1) return 'завтра, ' + text;
+    return text;
   }
 
   function masterName(choice) {
     return choice === ANY_MASTER ? 'Любой мастер' : choice.name;
   }
 
-  function freeLabel(n) {
-    if (n === 0) return 'нет мест';
+  function plural(n, one, few, many) {
     const mod10 = n % 10;
     const mod100 = n % 100;
-    let word = 'слотов';
-    if (mod10 === 1 && mod100 !== 11) word = 'слот';
-    else if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) word = 'слота';
-    return n + ' ' + word;
+    if (mod10 === 1 && mod100 !== 11) return one;
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
+    return many;
+  }
+
+  function freeLabel(n) {
+    if (n === 0) return 'нет свободного времени';
+    return n + ' ' + plural(n, 'свободный час', 'свободных часа', 'свободных часов') + ' на неделе';
+  }
+
+  // 45 → «45 мин», 60 → «1 ч», 90 → «1 ч 30 мин»
+  function durationFmt(minutes) {
+    if (!minutes) return '';
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return [h ? h + ' ч' : '', m ? m + ' мин' : ''].filter(Boolean).join(' ');
   }
 
   // ---------- Отрисовка ----------
+
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  const ICONS = {
+    clock: ['circle:12,12,9', 'M12 7v5l3 2'],
+    chevron: ['M9 6l6 6-6 6'],
+    users: ['circle:9,8,3.5', 'M2.5 20a6.5 6.5 0 0 1 13 0', 'M16 4.5a3.5 3.5 0 0 1 0 7', 'M18 14a6 6 0 0 1 3.5 6'],
+  };
+
+  // Иконки собираем из простых фигур: «circle:cx,cy,r» или путь SVG
+  function icon(name, className) {
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('aria-hidden', 'true');
+    if (className) svg.setAttribute('class', className);
+    ICONS[name].forEach((shape) => {
+      let node;
+      if (shape.startsWith('circle:')) {
+        const [cx, cy, r] = shape.slice(7).split(',');
+        node = document.createElementNS(SVG_NS, 'circle');
+        node.setAttribute('cx', cx);
+        node.setAttribute('cy', cy);
+        node.setAttribute('r', r);
+      } else {
+        node = document.createElementNS(SVG_NS, 'path');
+        node.setAttribute('d', shape);
+      }
+      svg.append(node);
+    });
+    return svg;
+  }
 
   function el(tag, className, text) {
     const node = document.createElement(tag);
@@ -181,17 +219,60 @@
     return node;
   }
 
+  function button(className) {
+    const btn = el('button', className);
+    btn.type = 'button';
+    return btn;
+  }
+
+  // Цвета аватаров: насыщенные, с белыми буквами читаются и в светлой, и в тёмной теме
+  const AVATAR_COLORS = ['#b4543a', '#3a6db4', '#7b57b0', '#2e8b68', '#a87a2c', '#b03f6c', '#45808f'];
+
+  function initials(name) {
+    const parts = name.trim().split(/\s+/).filter(Boolean);
+    const letters = parts.length > 1 ? parts[0][0] + parts[1][0] : (parts[0] || '?')[0];
+    return letters.toUpperCase();
+  }
+
+  function avatar(choice, small) {
+    const node = el('span', 'avatar' + (small ? ' small' : ''));
+    if (choice === ANY_MASTER) {
+      node.classList.add('any');
+      node.append(icon('users'));
+      return node;
+    }
+    let hash = 0;
+    for (const ch of choice.id) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+    node.style.background = AVATAR_COLORS[hash % AVATAR_COLORS.length];
+    node.textContent = initials(choice.name);
+    return node;
+  }
+
+  function renderShop() {
+    if (!data || !data.shop) return;
+    $('shopName').textContent = data.shop.name;
+    $('shopAddress').textContent = data.shop.address;
+    $('shopAddressRow').hidden = !data.shop.address;
+    document.title = 'Запись · ' + data.shop.name;
+  }
+
   function renderServices() {
     const box = $('services');
     box.replaceChildren();
     data.services.forEach((s) => {
-      const btn = el('button', 'option service');
-      btn.type = 'button';
+      const btn = button('card service');
       btn.setAttribute('aria-pressed', String(state.service === s));
-      btn.append(el('span', 'name', s.name), el('span', 'price', priceFmt(s.price)));
+      const body = el('span', 'body');
+      body.append(el('span', 'name', s.name));
+      if (s.minutes) {
+        const meta = el('span', 'meta');
+        meta.append(icon('clock'), document.createTextNode(durationFmt(s.minutes)));
+        body.append(meta);
+      }
+      btn.append(body, el('span', 'price', priceFmt(s.price)));
       btn.addEventListener('click', () => {
         state.service = s;
-        haptic();
+        select(btn);
         go(2);
       });
       box.append(btn);
@@ -202,83 +283,161 @@
     $('masterHint').textContent = state.service.name + ' · ' + priceFmt(state.service.price);
     const box = $('masters');
     box.replaceChildren();
+    const noneFree = weekFreeCount(ANY_MASTER) === 0;
+    $('noSlots').hidden = !noneFree;
+    box.hidden = noneFree;
+    if (noneFree) return;
+
     [ANY_MASTER, ...data.masters].forEach((choice) => {
       const free = weekFreeCount(choice);
-      const btn = el('button', 'option master');
-      btn.type = 'button';
+      const btn = button('card master');
       btn.disabled = free === 0;
       btn.setAttribute('aria-pressed', String(state.master === choice));
-      const info = el('span', 'info');
-      info.append(el('span', 'name', masterName(choice)));
-      const description = choice === ANY_MASTER ? 'Подберём свободного мастера' : choice.description;
-      if (description) info.append(el('span', 'description', description));
-      btn.append(info, el('span', 'free', freeLabel(free)));
+      const body = el('span', 'body');
+      body.append(el('span', 'name', masterName(choice)));
+      const description = choice === ANY_MASTER ? 'Запишем к тому, кто свободен в это время' : choice.description;
+      if (description) body.append(el('span', 'meta', description));
+      body.append(el('span', 'free' + (free ? ' has' : ''), freeLabel(free)));
+      btn.append(avatar(choice), body, icon('chevron', 'chevron'));
       btn.addEventListener('click', () => {
         if (state.master !== choice) {
           state.date = null;
           state.time = null;
         }
         state.master = choice;
-        haptic();
+        select(btn);
         go(3);
       });
       box.append(btn);
     });
   }
 
+  function firstFreeDay(from) {
+    for (let i = from; i < data.days; i++) {
+      if (freeCount(state.master, i) > 0) return i;
+    }
+    return -1;
+  }
+
+  function renderSlotsStep() {
+    $('slotHint').textContent = state.service.name + ' · ' + masterName(state.master);
+    // По умолчанию открываем ближайший день со свободным временем
+    if (state.date === null || freeCount(state.master, state.date) === 0) {
+      const first = firstFreeDay(0);
+      state.date = first === -1 ? 0 : first;
+      state.time = null;
+    }
+    renderDays();
+    renderTimes();
+    const current = $('days').querySelector('[aria-pressed="true"]');
+    if (current) current.scrollIntoView({ block: 'nearest', inline: 'center' });
+  }
+
   function renderDays() {
-    $('serviceHint').textContent = state.service.name + ' · ' + masterName(state.master);
     const box = $('days');
     box.replaceChildren();
     upcomingDays().forEach((d, i) => {
       const free = freeCount(state.master, i);
-      const btn = el('button', 'option day');
-      btn.type = 'button';
+      const btn = button('day');
       btn.disabled = free === 0;
       btn.setAttribute('aria-pressed', String(state.date === i));
+      btn.setAttribute('aria-label', longDate(i) + (free ? '' : ', нет свободного времени'));
       btn.append(
-        el('span', 'weekday', dayTitle(d, i)),
-        el('span', 'date', d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }).replace('.', '')),
-        el('span', 'free', freeLabel(free)),
+        el('span', 'wd', d.toLocaleDateString('ru-RU', { weekday: 'short' })),
+        el('span', 'num', String(d.getDate())),
+        el('span', 'mon', d.toLocaleDateString('ru-RU', { month: 'short' }).replace('.', '')),
+        el('span', 'mark'),
       );
       btn.addEventListener('click', () => {
-        if (state.date !== i) state.time = null;
+        if (state.date === i) return;
         state.date = i;
+        state.time = null;
         haptic();
-        go(4);
+        box.querySelectorAll('.day').forEach((b) => b.setAttribute('aria-pressed', String(b === btn)));
+        btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+        renderTimes();
       });
       box.append(btn);
     });
   }
 
+  const DAY_PARTS = [
+    { title: 'Утро', from: 0, to: 12 },
+    { title: 'День', from: 12, to: 17 },
+    { title: 'Вечер', from: 17, to: 24 },
+  ];
+
   function renderTimes() {
-    $('dayHint').textContent = longDate(state.date) + ' · ' + masterName(state.master);
+    $('dayTitle').textContent = longDate(state.date);
     const box = $('times');
     box.replaceChildren();
     const slots = slotsFor(state.master, state.date);
-    slots.forEach((slot) => {
-      const btn = el('button', 'option time', slot.time);
-      btn.type = 'button';
-      btn.disabled = !slot.available;
-      if (slot.reason === 'busy') btn.title = 'Занято';
-      if (slot.reason === 'past') btn.title = 'Время прошло';
-      btn.setAttribute('aria-pressed', String(state.time === slot.time));
-      btn.addEventListener('click', () => {
-        state.time = slot.time;
+    const hasFree = slots.some((s) => s.available);
+
+    $('timesEmpty').hidden = hasFree;
+    if (!hasFree) {
+      const next = firstFreeDay(state.date + 1);
+      $('timesEmptyText').textContent = next === -1
+        ? 'В ближайшие дни всё занято. Загляните позже — время может освободиться.'
+        : 'На этот день всё занято. Ближайшее свободное время — ' + longDate(next) + '.';
+      $('nextFree').hidden = next === -1;
+      $('nextFree').onclick = () => {
+        state.date = next;
         haptic();
-        go(5);
+        renderSlotsStep();
+      };
+      return;
+    }
+
+    DAY_PARTS.forEach((part) => {
+      const partSlots = slots.filter((s) => {
+        const h = Number(s.time.slice(0, 2));
+        return h >= part.from && h < part.to;
       });
-      box.append(btn);
+      if (!partSlots.length) return;
+      const free = partSlots.filter((s) => s.available).length;
+      const group = el('div', 'group');
+      const head = el('div', 'group-head');
+      head.append(el('b', '', part.title), el('span', '', free ? 'свободно: ' + free : 'всё занято'));
+      const grid = el('div', 'slots');
+      partSlots.forEach((slot) => {
+        const btn = button('chip');
+        btn.textContent = slot.time;
+        btn.disabled = !slot.available;
+        if (slot.reason === 'busy') btn.setAttribute('aria-label', slot.time + ', занято');
+        if (slot.reason === 'past') btn.setAttribute('aria-label', slot.time + ', время прошло');
+        btn.setAttribute('aria-pressed', String(state.time === slot.time));
+        btn.addEventListener('click', () => {
+          if (state.step !== 3) return;
+          state.time = slot.time;
+          box.querySelectorAll('.chip').forEach((b) => b.setAttribute('aria-pressed', String(b === btn)));
+          haptic();
+          // Короткая пауза, чтобы было видно выбранное время
+          setTimeout(() => { if (state.step === 3 && state.time === slot.time) go(4); }, 180);
+        });
+        grid.append(btn);
+      });
+      group.append(head, grid);
+      box.append(group);
     });
-    $('timesEmpty').hidden = slots.some((s) => s.available);
+    restartAnimation(box, 'fade');
   }
 
   function renderSummary() {
     $('sumService').textContent = state.service.name;
-    $('sumMaster').textContent = state.master === ANY_MASTER ? 'Любой свободный' : state.master.name;
+    $('sumDuration').textContent = state.service.minutes ? 'Длительность: ' + durationFmt(state.service.minutes) : '';
+    $('sumDuration').hidden = !state.service.minutes;
+
+    const master = $('sumMaster');
+    master.replaceChildren(avatar(state.master, true),
+      document.createTextNode(state.master === ANY_MASTER ? 'Любой свободный' : state.master.name));
+
     $('sumDate').textContent = longDate(state.date);
     $('sumTime').textContent = state.time;
+    $('sumAddressRow').hidden = !(data.shop && data.shop.address);
+    if (data.shop) $('sumAddress').textContent = data.shop.address;
     $('sumPrice').textContent = priceFmt(state.service.price);
+
     $('inlineWarning').hidden = !openedInline;
     $('result').hidden = true;
     $('demoConfirm').hidden = inTelegram;
@@ -286,23 +445,38 @@
   }
 
   function renderSteps() {
-    document.querySelectorAll('.steps li').forEach((li) => {
+    document.querySelectorAll('.stepper li').forEach((li) => {
       const n = Number(li.dataset.step);
       li.classList.toggle('current', n === state.step);
       li.classList.toggle('done', n < state.step);
+      if (n === state.step) li.setAttribute('aria-current', 'step');
+      else li.removeAttribute('aria-current');
     });
   }
 
+  function restartAnimation(node, className) {
+    node.classList.remove('fwd', 'back', 'fade');
+    void node.offsetWidth; // перезапуск CSS-анимации
+    node.classList.add(className);
+  }
+
+  function select(btn) {
+    btn.setAttribute('aria-pressed', 'true');
+    haptic();
+  }
+
   function go(step) {
+    const direction = step >= state.step ? 'fwd' : 'back';
     state.step = step;
     if (step === 1) renderServices();
     if (step === 2) renderMasters();
-    if (step === 3) renderDays();
-    if (step === 4) renderTimes();
-    if (step === 5) renderSummary();
+    if (step === 3) renderSlotsStep();
+    if (step === 4) renderSummary();
 
     document.querySelectorAll('.screen').forEach((s) => {
-      s.hidden = Number(s.dataset.screen) !== step;
+      const active = Number(s.dataset.screen) === step;
+      s.hidden = !active;
+      if (active) restartAnimation(s, direction);
     });
     renderSteps();
     updateControls();
@@ -310,7 +484,10 @@
   }
 
   function back() {
-    if (state.step > 1) go(state.step - 1);
+    if (state.step > 1) {
+      haptic('light');
+      go(state.step - 1);
+    }
   }
 
   // ---------- Кнопки Telegram и демо-режим ----------
@@ -324,8 +501,8 @@
     }
 
     if (inTelegram) {
-      if (state.step === 5 && !openedInline && !state.sent) {
-        tg.MainButton.setParams({ text: 'Подтвердить запись', is_visible: true, is_active: true });
+      if (state.step === 4 && !openedInline && !state.sent) {
+        tg.MainButton.setParams({ text: 'Записаться · ' + priceFmt(state.service.price), is_visible: true, is_active: true });
       } else {
         tg.MainButton.hide();
       }
@@ -346,16 +523,18 @@
     $('resultJson').textContent = JSON.stringify(payload, null, 2);
     $('result').hidden = false;
     $('demoConfirm').hidden = true;
+    restartAnimation($('result'), 'fade');
   }
 
   function confirm() {
-    if (state.step !== 5 || state.sent) return;
+    if (state.step !== 4 || state.sent) return;
 
     // Пока клиент смотрел на экран, выбранный час мог уже пройти.
     if (!isSlotAvailable(state.master, state.date, state.time)) {
+      haptic('error');
       notify('Это время уже недоступно. Выберите другое.');
       state.time = null;
-      go(4);
+      go(3);
       return;
     }
 
@@ -381,9 +560,11 @@
     else window.alert(text);
   }
 
+  // Без типа — выбор; 'light' — нажатие; 'success' / 'error' — итог действия
   function haptic(type) {
     if (!inTelegram || !tg.HapticFeedback || !tg.isVersionAtLeast('6.1')) return;
-    if (type) tg.HapticFeedback.notificationOccurred(type);
+    if (type === 'success' || type === 'error') tg.HapticFeedback.notificationOccurred(type);
+    else if (type) tg.HapticFeedback.impactOccurred(type);
     else tg.HapticFeedback.selectionChanged();
   }
 
@@ -408,10 +589,18 @@
     // Нет данных от бота или адрес испорчен — записаться отсюда не получится.
     if (!data) {
       $('loadError').hidden = false;
-      document.querySelector('.steps').hidden = true;
-      document.querySelectorAll('.screen').forEach((s) => { s.hidden = true; });
+      $('stepper').hidden = true;
+      const action = $('errorAction');
+      if (inTelegram) {
+        action.addEventListener('click', () => tg.close());
+      } else {
+        action.textContent = 'Обновить страницу';
+        action.addEventListener('click', () => window.location.reload());
+      }
       return;
     }
+
+    renderShop();
 
     if (inTelegram) {
       tg.MainButton.onClick(confirm);
