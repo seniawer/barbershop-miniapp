@@ -12,14 +12,18 @@
     n: 7,
     h: [10, 19],
     s: [
-      ['haircut', 'Мужская стрижка', 1500],
-      ['beard', 'Стрижка бороды', 800],
-      ['combo', 'Стрижка + борода', 2000],
+      ['haircut', 'Мужская стрижка', 1500, 45],
+      ['beard', 'Стрижка бороды', 800, 30],
+      ['combo', 'Стрижка + борода', 2000, 60],
+      ['kids', 'Детская стрижка', 1000, 30],
+      ['buzz', 'Стрижка машинкой', 700, 20],
     ],
     m: [
-      ['alex', 'Алексей', 'Классика и фейды', [0, 6, 0, 1023, 0, 0, 0]],
+      ['alex', 'Алексей', 'Классика и фейды, 8 лет опыта', [0, 6, 0, 1023, 0, 0, 0]],
       ['boris', 'Борис', 'Бороды и опасная бритва', [3, 0, 0, 0, 0, 0, 0]],
+      ['vika', 'Виктория', 'Модные и детские стрижки', [512, 0, 96, 0, 0, 1023, 0]],
     ],
+    b: ['Барбершоп «Бритва»', 'ул. Пушкина, 10'],
   };
 
   const tg = window.Telegram && window.Telegram.WebApp;
@@ -50,18 +54,21 @@
   // Проверяем форму данных, чтобы испорченный адрес не сломал страницу. null — данные неверные.
   function parseData(raw) {
     if (!raw || raw.v !== 1) return null;
-    const { d, n, h, s, m } = raw;
+    const { d, n, h, s, m, b } = raw;
     if (!isInt(n) || n < 1 || n > 31) return null;
     if (!Array.isArray(h) || h.length !== 2 || !isInt(h[0]) || !isInt(h[1]) || h[0] > h[1] || h[1] > 23) return null;
     if (d !== null && !(isStr(d) && /^\d{4}-\d{2}-\d{2}$/.test(d))) return null;
     if (!Array.isArray(s) || !s.length || !Array.isArray(m) || !m.length) return null;
     if (![...s, ...m].every(Array.isArray)) return null;
-    const services = s.map(([id, name, price]) => ({ id, name, price }));
+    // Длительность услуги и b (название и адрес) необязательны: старый бот их не присылает
+    const services = s.map(([id, name, price, minutes]) => ({ id, name, price, minutes: minutes ?? null }));
     const masters = m.map(([id, name, description, busy]) => ({ id, name, description, busy }));
-    if (!services.every((x) => isStr(x.id) && isStr(x.name) && isInt(x.price))) return null;
+    if (!services.every((x) => isStr(x.id) && isStr(x.name) && isInt(x.price)
+      && (x.minutes === null || (isInt(x.minutes) && x.minutes > 0)))) return null;
     if (!masters.every((x) => isStr(x.id) && isStr(x.name) && isStr(x.description)
       && Array.isArray(x.busy) && x.busy.length === n && x.busy.every(isInt))) return null;
-    return { firstDay: d, days: n, firstHour: h[0], lastHour: h[1], services, masters };
+    const shop = Array.isArray(b) && b.length === 2 && b.every(isStr) ? { name: b[0], address: b[1] } : null;
+    return { firstDay: d, days: n, firstHour: h[0], lastHour: h[1], services, masters, shop };
   }
 
   function loadData() {
