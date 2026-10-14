@@ -532,12 +532,16 @@
 
   // Бот получает только коды: услугу и мастера он сверяет со своим списком, цену берёт у себя.
   function buildPayload() {
-    return {
+    const payload = {
       service: state.service.id,
       master: state.master === ANY_MASTER ? ANY_MASTER : state.master.id,
       date: dateKey(upcomingDays()[state.date]),
       time: state.time,
     };
+    // Комментарий необязателен; бот его ещё раз чистит и обрезает до 200 символов
+    const comment = $('comment').value.replace(/\s+/g, ' ').trim();
+    if (comment) payload.comment = comment.slice(0, 200);
+    return payload;
   }
 
   function showResult(payload) {
@@ -593,6 +597,7 @@
     state.master = null;
     state.date = null;
     state.time = null;
+    $('comment').value = '';
     go(1, true);
   }
 

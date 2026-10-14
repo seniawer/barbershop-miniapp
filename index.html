@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600&display=swap">
-  <link rel="stylesheet" href="style.css?v=20261015-1">
+  <link rel="stylesheet" href="style.css?v=20261015-2">
 </head>
 <body>
   <div class="app">
@@ -85,6 +85,10 @@
           </dl>
           <div class="ticket-total"><span>К оплате в барбершопе</span><strong id="tPrice"></strong></div>
         </article>
+        <label class="comment" for="comment">
+          <span class="comment-label">Комментарий для мастера <span class="comment-optional">— необязательно</span></span>
+          <textarea id="comment" rows="2" maxlength="200" placeholder="Например: покороче на висках"></textarea>
+        </label>
         <p class="note" id="inlineWarning" hidden>
           Страница открыта через инлайн-кнопку, поэтому отправить выбор боту не получится.
           Откройте её через кнопку под полем ввода сообщения.
@@ -99,6 +103,6 @@
     </main>
   </div>
 
-  <script src="app.js?v=20261015-1"></script>
+  <script src="app.js?v=20261015-2"></script>
 </body>
 </html>

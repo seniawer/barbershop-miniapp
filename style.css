@@ -477,6 +477,27 @@ h2 {
 .ticket-total strong { font: 500 26px/1 var(--display); }
 .ticket .mono.small { border-color: currentColor; color: inherit; }
 
+/* ---------- Комментарий к записи ---------- */
+
+.comment { display: block; margin-top: 18px; }
+.comment-label { display: block; margin-bottom: 6px; font-size: 14px; font-weight: 600; }
+.comment-optional { font-weight: 400; color: var(--muted); }
+.comment textarea {
+  display: block;
+  width: 100%;
+  min-height: 64px;
+  padding: 10px 12px;
+  resize: vertical;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  /* 16px — чтобы iOS не увеличивал страницу при фокусе */
+  font: 16px/1.4 var(--body);
+}
+.comment textarea::placeholder { color: var(--muted); opacity: 1; }
+.comment textarea:focus { border-color: var(--brass); outline: none; }
+
 /* ---------- Кнопки и состояния ---------- */
 
 .primary,
