@@ -15,35 +15,48 @@
       <div class="demo-badge" id="demoBadge" hidden>Демо-режим: открыто вне Telegram</div>
       <ol class="steps" aria-label="Шаги записи">
         <li data-step="1">Услуга</li>
-        <li data-step="2">День</li>
-        <li data-step="3">Время</li>
-        <li data-step="4">Готово</li>
+        <li data-step="2">Мастер</li>
+        <li data-step="3">День</li>
+        <li data-step="4">Время</li>
+        <li data-step="5">Готово</li>
       </ol>
     </header>
 
     <main>
+      <p class="empty" id="loadError" hidden>
+        Не удалось загрузить расписание. Закройте страницу и откройте её заново кнопкой
+        «📅 Открыть онлайн-запись» в чате с ботом.
+      </p>
+
       <section class="screen" data-screen="1">
         <h1>Выберите услугу</h1>
         <div class="list" id="services"></div>
       </section>
 
       <section class="screen" data-screen="2" hidden>
+        <h1>Выберите мастера</h1>
+        <p class="hint" id="masterHint"></p>
+        <div class="list" id="masters"></div>
+      </section>
+
+      <section class="screen" data-screen="3" hidden>
         <h1>Выберите день</h1>
         <p class="hint" id="serviceHint"></p>
         <div class="grid days" id="days"></div>
       </section>
 
-      <section class="screen" data-screen="3" hidden>
+      <section class="screen" data-screen="4" hidden>
         <h1>Выберите время</h1>
         <p class="hint" id="dayHint"></p>
         <div class="grid times" id="times"></div>
         <p class="empty" id="timesEmpty" hidden>На этот день свободного времени нет. Вернитесь и выберите другой день.</p>
       </section>
 
-      <section class="screen" data-screen="4" hidden>
+      <section class="screen" data-screen="5" hidden>
         <h1>Проверьте запись</h1>
         <dl class="summary">
           <div><dt>Услуга</dt><dd id="sumService"></dd></div>
+          <div><dt>Мастер</dt><dd id="sumMaster"></dd></div>
           <div><dt>Дата</dt><dd id="sumDate"></dd></div>
           <div><dt>Время</dt><dd id="sumTime"></dd></div>
           <div class="total"><dt>Стоимость</dt><dd id="sumPrice"></dd></div>

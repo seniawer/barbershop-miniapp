@@ -1,16 +1,26 @@
 (function () {
   'use strict';
 
-  const SERVICES = [
-    { id: 'haircut', name: 'Мужская стрижка', price: 1500 },
-    { id: 'beard', name: 'Стрижка бороды', price: 800 },
-    { id: 'haircut_beard', name: 'Стрижка + борода', price: 2000 },
-    { id: 'kids', name: 'Детская стрижка', price: 1000 },
-    { id: 'clipper', name: 'Стрижка машинкой', price: 700 },
-  ];
-  const DAYS_AHEAD = 7;
-  const FIRST_HOUR = 10;
-  const LAST_HOUR = 19;
+  // Особое значение мастера: «Любой мастер» — бот сам выберет свободного.
+  const ANY_MASTER = 'any';
+
+  // Демо-данные: только для открытия страницы в браузере без параметра d.
+  // В Telegram услуги, мастеров и занятость всегда присылает бот.
+  const DEMO_DATA = {
+    v: 1,
+    d: null, // сегодня
+    n: 7,
+    h: [10, 19],
+    s: [
+      ['haircut', 'Мужская стрижка', 1500],
+      ['beard', 'Стрижка бороды', 800],
+      ['combo', 'Стрижка + борода', 2000],
+    ],
+    m: [
+      ['alex', 'Алексей', 'Классика и фейды', [0, 6, 0, 1023, 0, 0, 0]],
+      ['boris', 'Борис', 'Бороды и опасная бритва', [3, 0, 0, 0, 0, 0, 0]],
+    ],
+  };
 
   const tg = window.Telegram && window.Telegram.WebApp;
   // Вне Telegram скрипт тоже создаёт объект WebApp, но platform = 'unknown'.
@@ -19,11 +29,53 @@
   const openedInline = Boolean(inTelegram && tg.initDataUnsafe && tg.initDataUnsafe.query_id);
   const nativeBack = inTelegram && tg.isVersionAtLeast && tg.isVersionAtLeast('6.1');
 
-  const state = { step: 1, service: null, date: null, time: null, sent: false };
-  const busy = parseBusy(new URLSearchParams(window.location.search).get('busy'));
+  // date — номер дня от первого (0 — первый день из данных бота)
+  const state = { step: 1, service: null, master: null, date: null, time: null, sent: false };
 
   const $ = (id) => document.getElementById(id);
   const priceFmt = (n) => n.toLocaleString('ru-RU') + ' ₽';
+
+  // ---------- Данные от бота ----------
+
+  // Параметр d: JSON → UTF-8 → base64url (без «=»). Формат описан в README.
+  function decodeParam(raw) {
+    const b64 = raw.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (raw.length % 4)) % 4);
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    return JSON.parse(new TextDecoder().decode(bytes));
+  }
+
+  const isInt = (x) => Number.isInteger(x) && x >= 0;
+  const isStr = (x) => typeof x === 'string';
+
+  // Проверяем форму данных, чтобы испорченный адрес не сломал страницу. null — данные неверные.
+  function parseData(raw) {
+    if (!raw || raw.v !== 1) return null;
+    const { d, n, h, s, m } = raw;
+    if (!isInt(n) || n < 1 || n > 31) return null;
+    if (!Array.isArray(h) || h.length !== 2 || !isInt(h[0]) || !isInt(h[1]) || h[0] > h[1] || h[1] > 23) return null;
+    if (d !== null && !(isStr(d) && /^\d{4}-\d{2}-\d{2}$/.test(d))) return null;
+    if (!Array.isArray(s) || !s.length || !Array.isArray(m) || !m.length) return null;
+    if (![...s, ...m].every(Array.isArray)) return null;
+    const services = s.map(([id, name, price]) => ({ id, name, price }));
+    const masters = m.map(([id, name, description, busy]) => ({ id, name, description, busy }));
+    if (!services.every((x) => isStr(x.id) && isStr(x.name) && isInt(x.price))) return null;
+    if (!masters.every((x) => isStr(x.id) && isStr(x.name) && isStr(x.description)
+      && Array.isArray(x.busy) && x.busy.length === n && x.busy.every(isInt))) return null;
+    return { firstDay: d, days: n, firstHour: h[0], lastHour: h[1], services, masters };
+  }
+
+  function loadData() {
+    const raw = new URLSearchParams(window.location.search).get('d');
+    // Без параметра в Telegram записываться некуда, а в браузере показываем демо.
+    if (!raw) return inTelegram ? null : parseData(DEMO_DATA);
+    try {
+      return parseData(decodeParam(raw));
+    } catch (err) {
+      return null;
+    }
+  }
+
+  const data = loadData();
 
   // ---------- Даты и слоты ----------
 
@@ -33,43 +85,58 @@
     return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
   }
 
-  function parseBusy(raw) {
-    const set = new Set();
-    if (!raw) return set;
-    raw.split(',').forEach((item) => {
-      const value = item.trim();
-      if (/^\d{4}-\d{2}-\d{2}_\d{2}:\d{2}$/.test(value)) set.add(value);
-    });
-    return set;
-  }
-
+  // Дни считаем от первого дня, который прислал бот (по часам сервера), а не от часов телефона.
   function upcomingDays() {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return Array.from({ length: DAYS_AHEAD }, (_, i) => {
-      const d = new Date(today);
-      d.setDate(today.getDate() + i);
+    let first = new Date();
+    if (data.firstDay) {
+      const [y, m, d] = data.firstDay.split('-').map(Number);
+      first = new Date(y, m - 1, d);
+    }
+    first.setHours(0, 0, 0, 0);
+    return Array.from({ length: data.days }, (_, i) => {
+      const d = new Date(first);
+      d.setDate(first.getDate() + i);
       return d;
     });
   }
 
-  function slotsFor(dayKey) {
+  // Занятость мастера в день dayIndex — число, бит i которого означает час firstHour + i.
+  function isBusy(master, dayIndex, hour) {
+    return Boolean((master.busy[dayIndex] >> (hour - data.firstHour)) & 1);
+  }
+
+  // Для «Любого мастера» слот свободен, если свободен хотя бы один мастер.
+  function mastersFor(choice) {
+    return choice === ANY_MASTER ? data.masters : [choice];
+  }
+
+  function slotsFor(choice, dayIndex) {
     const now = new Date();
-    const [y, m, d] = dayKey.split('-').map(Number);
+    const day = upcomingDays()[dayIndex];
     const slots = [];
-    for (let h = FIRST_HOUR; h <= LAST_HOUR; h++) {
+    for (let h = data.firstHour; h <= data.lastHour; h++) {
       const time = pad(h) + ':00';
-      const start = new Date(y, m - 1, d, h, 0, 0, 0);
+      const start = new Date(day.getFullYear(), day.getMonth(), day.getDate(), h, 0, 0, 0);
       let reason = null;
       if (start <= now) reason = 'past';
-      else if (busy.has(dayKey + '_' + time)) reason = 'busy';
+      else if (mastersFor(choice).every((m) => isBusy(m, dayIndex, h))) reason = 'busy';
       slots.push({ time, available: reason === null, reason });
     }
     return slots;
   }
 
-  function isSlotAvailable(dayKey, time) {
-    return slotsFor(dayKey).some((s) => s.time === time && s.available);
+  function freeCount(choice, dayIndex) {
+    return slotsFor(choice, dayIndex).filter((s) => s.available).length;
+  }
+
+  function weekFreeCount(choice) {
+    let total = 0;
+    for (let i = 0; i < data.days; i++) total += freeCount(choice, i);
+    return total;
+  }
+
+  function isSlotAvailable(choice, dayIndex, time) {
+    return slotsFor(choice, dayIndex).some((s) => s.time === time && s.available);
   }
 
   function dayTitle(d, index) {
@@ -78,11 +145,14 @@
     return d.toLocaleDateString('ru-RU', { weekday: 'short' });
   }
 
-  function longDate(key) {
-    const [y, m, d] = key.split('-').map(Number);
-    return new Date(y, m - 1, d).toLocaleDateString('ru-RU', {
+  function longDate(index) {
+    return upcomingDays()[index].toLocaleDateString('ru-RU', {
       weekday: 'long', day: 'numeric', month: 'long',
     });
+  }
+
+  function masterName(choice) {
+    return choice === ANY_MASTER ? 'Любой мастер' : choice.name;
   }
 
   function freeLabel(n) {
@@ -107,7 +177,7 @@
   function renderServices() {
     const box = $('services');
     box.replaceChildren();
-    SERVICES.forEach((s) => {
+    data.services.forEach((s) => {
       const btn = el('button', 'option service');
       btn.type = 'button';
       btn.setAttribute('aria-pressed', String(state.service === s));
@@ -121,25 +191,27 @@
     });
   }
 
-  function renderDays() {
-    $('serviceHint').textContent = state.service.name + ' · ' + priceFmt(state.service.price);
-    const box = $('days');
+  function renderMasters() {
+    $('masterHint').textContent = state.service.name + ' · ' + priceFmt(state.service.price);
+    const box = $('masters');
     box.replaceChildren();
-    upcomingDays().forEach((d, i) => {
-      const key = dateKey(d);
-      const free = slotsFor(key).filter((s) => s.available).length;
-      const btn = el('button', 'option day');
+    [ANY_MASTER, ...data.masters].forEach((choice) => {
+      const free = weekFreeCount(choice);
+      const btn = el('button', 'option master');
       btn.type = 'button';
       btn.disabled = free === 0;
-      btn.setAttribute('aria-pressed', String(state.date === key));
-      btn.append(
-        el('span', 'weekday', dayTitle(d, i)),
-        el('span', 'date', d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }).replace('.', '')),
-        el('span', 'free', freeLabel(free)),
-      );
+      btn.setAttribute('aria-pressed', String(state.master === choice));
+      const info = el('span', 'info');
+      info.append(el('span', 'name', masterName(choice)));
+      const description = choice === ANY_MASTER ? 'Подберём свободного мастера' : choice.description;
+      if (description) info.append(el('span', 'description', description));
+      btn.append(info, el('span', 'free', freeLabel(free)));
       btn.addEventListener('click', () => {
-        if (state.date !== key) state.time = null;
-        state.date = key;
+        if (state.master !== choice) {
+          state.date = null;
+          state.time = null;
+        }
+        state.master = choice;
         haptic();
         go(3);
       });
@@ -147,11 +219,36 @@
     });
   }
 
+  function renderDays() {
+    $('serviceHint').textContent = state.service.name + ' · ' + masterName(state.master);
+    const box = $('days');
+    box.replaceChildren();
+    upcomingDays().forEach((d, i) => {
+      const free = freeCount(state.master, i);
+      const btn = el('button', 'option day');
+      btn.type = 'button';
+      btn.disabled = free === 0;
+      btn.setAttribute('aria-pressed', String(state.date === i));
+      btn.append(
+        el('span', 'weekday', dayTitle(d, i)),
+        el('span', 'date', d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }).replace('.', '')),
+        el('span', 'free', freeLabel(free)),
+      );
+      btn.addEventListener('click', () => {
+        if (state.date !== i) state.time = null;
+        state.date = i;
+        haptic();
+        go(4);
+      });
+      box.append(btn);
+    });
+  }
+
   function renderTimes() {
-    $('dayHint').textContent = longDate(state.date);
+    $('dayHint').textContent = longDate(state.date) + ' · ' + masterName(state.master);
     const box = $('times');
     box.replaceChildren();
-    const slots = slotsFor(state.date);
+    const slots = slotsFor(state.master, state.date);
     slots.forEach((slot) => {
       const btn = el('button', 'option time', slot.time);
       btn.type = 'button';
@@ -162,7 +259,7 @@
       btn.addEventListener('click', () => {
         state.time = slot.time;
         haptic();
-        go(4);
+        go(5);
       });
       box.append(btn);
     });
@@ -171,6 +268,7 @@
 
   function renderSummary() {
     $('sumService').textContent = state.service.name;
+    $('sumMaster').textContent = state.master === ANY_MASTER ? 'Любой свободный' : state.master.name;
     $('sumDate').textContent = longDate(state.date);
     $('sumTime').textContent = state.time;
     $('sumPrice').textContent = priceFmt(state.service.price);
@@ -191,9 +289,10 @@
   function go(step) {
     state.step = step;
     if (step === 1) renderServices();
-    if (step === 2) renderDays();
-    if (step === 3) renderTimes();
-    if (step === 4) renderSummary();
+    if (step === 2) renderMasters();
+    if (step === 3) renderDays();
+    if (step === 4) renderTimes();
+    if (step === 5) renderSummary();
 
     document.querySelectorAll('.screen').forEach((s) => {
       s.hidden = Number(s.dataset.screen) !== step;
@@ -218,7 +317,7 @@
     }
 
     if (inTelegram) {
-      if (state.step === 4 && !openedInline && !state.sent) {
+      if (state.step === 5 && !openedInline && !state.sent) {
         tg.MainButton.setParams({ text: 'Подтвердить запись', is_visible: true, is_active: true });
       } else {
         tg.MainButton.hide();
@@ -226,11 +325,12 @@
     }
   }
 
+  // Бот получает только коды: услугу и мастера он сверяет со своим списком, цену берёт у себя.
   function buildPayload() {
     return {
-      service: state.service.name,
-      price: state.service.price,
-      date: state.date,
+      service: state.service.id,
+      master: state.master === ANY_MASTER ? ANY_MASTER : state.master.id,
+      date: dateKey(upcomingDays()[state.date]),
       time: state.time,
     };
   }
@@ -242,13 +342,13 @@
   }
 
   function confirm() {
-    if (state.step !== 4 || state.sent) return;
+    if (state.step !== 5 || state.sent) return;
 
     // Пока клиент смотрел на экран, выбранный час мог уже пройти.
-    if (!isSlotAvailable(state.date, state.time)) {
+    if (!isSlotAvailable(state.master, state.date, state.time)) {
       notify('Это время уже недоступно. Выберите другое.');
       state.time = null;
-      go(3);
+      go(4);
       return;
     }
 
@@ -282,6 +382,7 @@
 
   function restart() {
     state.service = null;
+    state.master = null;
     state.date = null;
     state.time = null;
     go(1);
@@ -293,10 +394,21 @@
     if (inTelegram) {
       tg.ready();
       tg.expand();
-      tg.MainButton.onClick(confirm);
-      if (nativeBack) tg.BackButton.onClick(back);
     } else {
       $('demoBadge').hidden = false;
+    }
+
+    // Нет данных от бота или адрес испорчен — записаться отсюда не получится.
+    if (!data) {
+      $('loadError').hidden = false;
+      document.querySelector('.steps').hidden = true;
+      document.querySelectorAll('.screen').forEach((s) => { s.hidden = true; });
+      return;
+    }
+
+    if (inTelegram) {
+      tg.MainButton.onClick(confirm);
+      if (nativeBack) tg.BackButton.onClick(back);
     }
 
     $('demoBack').addEventListener('click', back);
