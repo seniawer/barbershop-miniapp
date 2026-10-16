@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600&display=swap">
-  <link rel="stylesheet" href="style.css?v=20261015-2">
+  <link rel="stylesheet" href="style.css?v=20261015-3">
 </head>
 <body>
   <div class="app">
@@ -22,6 +22,12 @@
     </header>
 
     <div class="demo-badge" id="demoBadge" hidden>Демо-режим: страница открыта вне Telegram</div>
+
+    <nav class="tabs" id="tabs" role="tablist" aria-label="Разделы" hidden>
+      <button type="button" role="tab" data-tab="book">Запись</button>
+      <button type="button" role="tab" data-tab="my">Мои записи<span class="tab-count" id="myCount" hidden></span></button>
+      <button type="button" role="tab" data-tab="about">О барбершопе</button>
+    </nav>
 
     <div class="progress" id="progress" aria-hidden="true">
       <span class="progress-text" id="progressText"></span>
@@ -40,6 +46,11 @@
       </section>
 
       <section class="screen" data-screen="1" hidden>
+        <button type="button" class="repeat" id="repeat" hidden>
+          <span class="repeat-title">Записаться снова</span>
+          <span class="repeat-what" id="repeatWhat"></span>
+          <svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
         <h1>Услуги</h1>
         <div class="price-list" id="services"></div>
       </section>
@@ -94,15 +105,58 @@
           Откройте её через кнопку под полем ввода сообщения.
         </p>
         <button type="button" class="primary" id="demoConfirm" hidden>Записаться</button>
-        <div class="result" id="result" hidden>
-          <p>Эти данные получил бы бот через <code>sendData</code>:</p>
-          <pre id="resultJson"></pre>
-          <button type="button" class="secondary" id="restart">Начать заново</button>
+      </section>
+
+      <section class="screen" data-screen="my" hidden>
+        <h1>Мои записи</h1>
+        <div class="bookings" id="bookings"></div>
+        <div class="state" id="noBookings" hidden>
+          <h2>Записей пока нет</h2>
+          <p>Здесь появятся ваши будущие визиты — их можно будет перенести или отменить.</p>
+          <button type="button" class="secondary" id="toBook">Записаться</button>
         </div>
+        <p class="note" id="myInlineWarning" hidden>
+          Страница открыта через инлайн-кнопку, поэтому перенести или отменить запись отсюда не получится.
+          Откройте её через кнопку под полем ввода сообщения.
+        </p>
+      </section>
+
+      <section class="screen" data-screen="move" hidden>
+        <h1>Перенос записи</h1>
+        <p class="hint" id="moveHint"></p>
+        <div class="days" id="mDays" aria-label="Дни"></div>
+        <p class="day-title" id="mDayTitle"></p>
+        <div id="mTimes"></div>
+        <div class="state" id="mTimesEmpty" hidden>
+          <h2>Нет свободного времени</h2>
+          <p id="mTimesEmptyText">На этот день всё занято.</p>
+          <button type="button" class="secondary" id="mNextFree" hidden>Ближайший свободный день</button>
+        </div>
+        <button type="button" class="primary" id="demoMove" hidden disabled>Перенести</button>
+      </section>
+
+      <section class="screen" data-screen="about" hidden>
+        <h1 id="aboutName">Барбершоп</h1>
+        <dl class="facts">
+          <div id="aboutAddressRow">
+            <dt>Адрес</dt>
+            <dd><span id="aboutAddress"></span><a class="link" id="aboutMap" href="#" target="_blank" rel="noopener">Открыть в Яндекс Картах</a></dd>
+          </div>
+          <div id="aboutPhoneRow"><dt>Телефон</dt><dd><a class="phone" id="aboutPhone" href="#"></a></dd></div>
+          <div><dt>Часы работы</dt><dd><span id="aboutHours"></span><span class="status" id="aboutStatus"></span></dd></div>
+        </dl>
+        <h2 class="section-title">Мастера</h2>
+        <div class="master-list static" id="aboutMasters"></div>
+      </section>
+
+      <section class="result" id="result" hidden>
+        <p>Эти данные получил бы бот через <code>sendData</code>:</p>
+        <pre id="resultJson"></pre>
+        <button type="button" class="secondary" id="restart">Начать заново</button>
       </section>
     </main>
   </div>
 
-  <script src="app.js?v=20261015-2"></script>
+  <script src="app.js?v=20261015-3"></script>
 </body>
 </html>
