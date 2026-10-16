@@ -38,6 +38,39 @@
 Адрес со ссылкой «Открыть в Яндекс Картах» (`Telegram.WebApp.openLink`), телефон (ссылка `tel:`),
 часы работы со статусом и список мастеров.
 
+## Скриншоты
+
+Демо-данные, ширина экрана 390 px. Тема выбирается по теме Telegram у клиента.
+
+<table>
+  <tr><th>Светлая тема</th><th>Тёмная тема</th></tr>
+  <tr><td colspan="2" align="center"><b>Запись: прайс-лист услуг и «Записаться снова»</b></td></tr>
+  <tr>
+    <td><img src="screenshots/miniapp-service-light.png" width="300" alt="Запись: прайс-лист услуг и «Записаться снова» — светлая тема"></td>
+    <td><img src="screenshots/miniapp-service-dark.png" width="300" alt="Запись: прайс-лист услуг и «Записаться снова» — тёмная тема"></td>
+  </tr>
+  <tr><td colspan="2" align="center"><b>Выбор дня и времени: прошедшее и занятое время выбрать нельзя</b></td></tr>
+  <tr>
+    <td><img src="screenshots/miniapp-time-light.png" width="300" alt="Выбор дня и времени: прошедшее и занятое время выбрать нельзя — светлая тема"></td>
+    <td><img src="screenshots/miniapp-time-dark.png" width="300" alt="Выбор дня и времени: прошедшее и занятое время выбрать нельзя — тёмная тема"></td>
+  </tr>
+  <tr><td colspan="2" align="center"><b>Талон записи с комментарием для мастера</b></td></tr>
+  <tr>
+    <td><img src="screenshots/miniapp-ticket-light.png" width="300" alt="Талон записи с комментарием для мастера — светлая тема"></td>
+    <td><img src="screenshots/miniapp-ticket-dark.png" width="300" alt="Талон записи с комментарием для мастера — тёмная тема"></td>
+  </tr>
+  <tr><td colspan="2" align="center"><b>Мои записи: перенос и отмена</b></td></tr>
+  <tr>
+    <td><img src="screenshots/miniapp-my-light.png" width="300" alt="Мои записи: перенос и отмена — светлая тема"></td>
+    <td><img src="screenshots/miniapp-my-dark.png" width="300" alt="Мои записи: перенос и отмена — тёмная тема"></td>
+  </tr>
+  <tr><td colspan="2" align="center"><b>О барбершопе: адрес, телефон, часы работы и мастера</b></td></tr>
+  <tr>
+    <td><img src="screenshots/miniapp-about-light.png" width="300" alt="О барбершопе: адрес, телефон, часы работы и мастера — светлая тема"></td>
+    <td><img src="screenshots/miniapp-about-dark.png" width="300" alt="О барбершопе: адрес, телефон, часы работы и мастера — тёмная тема"></td>
+  </tr>
+</table>
+
 ## Дизайн
 
 Цвета у страницы свои, не из `themeParams`: тема Telegram (`colorScheme`) только выбирает светлую
